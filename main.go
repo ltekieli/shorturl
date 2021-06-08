@@ -14,6 +14,8 @@ const RequestLimit = 2048
 var MappingLongToShort map[string]string
 var MappingShortToLong map[string]string
 
+var db Database
+
 type LongLink struct {
 	Url string `json:"url"`
 }
@@ -33,6 +35,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &longLink)
 	if err != nil {
 		http.Error(w, "Invalid long link request", http.StatusInternalServerError)
+		return
 	}
 	log.Print(longLink)
 
@@ -41,7 +44,15 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 		shortLink := ShortLink{Url: cached}
 		json.NewEncoder(w).Encode(shortLink)
 	} else {
-		sid, _ := nanoid.New()
+		sid, err := db.FetchByLong(longLink.Url)
+		if err != nil {
+			sid, _ = nanoid.New()
+			err := db.Insert(longLink.Url, sid)
+			if err != nil {
+				http.Error(w, "Cannot insert to database", http.StatusInternalServerError)
+				return
+			}
+		}
 		MappingLongToShort[longLink.Url] = sid
 		MappingShortToLong[sid] = longLink.Url
 		shortLink := ShortLink{Url: sid}
@@ -60,6 +71,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &shortLink)
 	if err != nil {
 		http.Error(w, "Invalid short link request", http.StatusInternalServerError)
+		return
 	}
 	log.Print(shortLink)
 
@@ -68,11 +80,30 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 		longLink := ShortLink{Url: cached}
 		json.NewEncoder(w).Encode(longLink)
 	} else {
-		http.Error(w, "Short link does not exist", http.StatusInternalServerError)
+		lid, err := db.FetchByShort(shortLink.Url)
+		if err != nil {
+			http.Error(w, "Short link does not exist", http.StatusInternalServerError)
+		} else {
+			MappingLongToShort[lid] = shortLink.Url
+			MappingShortToLong[shortLink.Url] = lid
+			longLink := LongLink{Url: lid}
+			json.NewEncoder(w).Encode(longLink)
+		}
 	}
 }
 
 func main() {
+	log.Print("Connecting to database...")
+
+	uri := "mongodb://192.168.30.2:27017"
+	var err error
+	db, err = Connect(uri, "shorturls", "shorturls")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Disconnect()
+	log.Print("Successfully connected")
+
 	log.Printf("Starting URL shortener...")
 	MappingLongToShort = make(map[string]string)
 	MappingShortToLong = make(map[string]string)
