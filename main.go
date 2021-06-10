@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 )
 
 const RequestLimit = 2048
@@ -28,7 +29,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
 		log.Print("Failed to read shorten request")
-		http.Error(w, "Failed to read shorten request", http.StatusInternalServerError)
+		http.Error(w, "Failed to read shorten request", http.StatusBadRequest)
 		return
 	}
 
@@ -36,7 +37,14 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &longLink)
 	if err != nil {
 		log.Print("Shorten request contains invalid LongLink")
-		http.Error(w, "Shorten request contains invalid LongLink", http.StatusInternalServerError)
+		http.Error(w, "Shorten request contains invalid LongLink", http.StatusBadRequest)
+		return
+	}
+
+	_, err = url.ParseRequestURI(longLink.Url)
+	if err != nil {
+		log.Print("Invalid URI received")
+		http.Error(w, "Invalid URI received", http.StatusBadRequest)
 		return
 	}
 
@@ -80,7 +88,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
 		log.Print("Failed to read resolve request")
-		http.Error(w, "Failed to read resolve request", http.StatusInternalServerError)
+		http.Error(w, "Failed to read resolve request", http.StatusBadRequest)
 		return
 	}
 
@@ -88,7 +96,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &shortLink)
 	if err != nil {
 		log.Print("Resolve request contains invalid ShortLink")
-		http.Error(w, "Resolve request contains invalid ShortLink", http.StatusInternalServerError)
+		http.Error(w, "Resolve request contains invalid ShortLink", http.StatusBadRequest)
 		return
 	}
 
