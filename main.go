@@ -8,14 +8,15 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/ltekieli/shorturl/cache"
+	"github.com/ltekieli/shorturl/db"
 )
 
 const RequestLimit = 2048
 
-var MappingLongToShort map[string]string
-var MappingShortToLong map[string]string
-
-var db Database
+var gCache cache.Cache
+var gDb db.Database
 
 type LongLink struct {
 	Url string `json:"url"`
@@ -50,12 +51,12 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Shorten request received with: %s", longLink.Url)
 
-	cached, ok := MappingLongToShort[longLink.Url]
+	cached, ok := gCache.FetchByLong(longLink.Url)
 	if ok {
 		shortLink := ShortLink{Url: cached}
 		json.NewEncoder(w).Encode(shortLink)
 	} else {
-		sids, err := db.FetchByLong(longLink.Url)
+		sids, err := gDb.FetchByLong(longLink.Url)
 		if err != nil {
 			log.Print("Cannot fetch from database")
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
@@ -64,7 +65,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 
 		if len(sids) == 0 {
 			sid, _ := nanoid.New()
-			err := db.Insert(longLink.Url, sid)
+			err := gDb.Insert(longLink.Url, sid)
 			if err != nil {
 				log.Print("Cannot insert to database")
 				http.Error(w, "Cannot insert to database", http.StatusInternalServerError)
@@ -77,8 +78,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		MappingLongToShort[longLink.Url] = sids[0]
-		MappingShortToLong[sids[0]] = longLink.Url
+		gCache.Update(longLink.Url, sids[0])
 		shortLink := ShortLink{Url: sids[0]}
 		json.NewEncoder(w).Encode(shortLink)
 	}
@@ -102,12 +102,12 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Resolve request received with: %s", shortLink.Url)
 
-	cached, ok := MappingShortToLong[shortLink.Url]
+	cached, ok := gCache.FetchByShort(shortLink.Url)
 	if ok {
 		longLink := ShortLink{Url: cached}
 		json.NewEncoder(w).Encode(longLink)
 	} else {
-		lid, err := db.FetchByShort(shortLink.Url)
+		lid, err := gDb.FetchByShort(shortLink.Url)
 		if err != nil {
 			log.Print("Cannot fetch from database")
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
@@ -123,31 +123,32 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Too many entries in the database for the same short link", http.StatusInternalServerError)
 		}
 
-		MappingLongToShort[lid[0]] = shortLink.Url
-		MappingShortToLong[shortLink.Url] = lid[0]
+		gCache.Update(lid[0], shortLink.Url)
 		longLink := LongLink{Url: lid[0]}
 		json.NewEncoder(w).Encode(longLink)
 	}
 }
 
 func main() {
+	log.Print("Starting URL shortener...")
 	log.Print("Connecting to database...")
-
 	uri := "mongodb://192.168.30.2:27017"
 	var err error
-	db, err = Connect(uri, "shorturls", "shorturls")
+	gDb, err = db.Connect(uri, "shorturls", "shorturls")
 	if err != nil {
 		panic(err)
 	}
-	defer db.Disconnect()
+	defer gDb.Disconnect()
 	log.Print("Successfully connected")
+	gCache = cache.New()
+	log.Print("Setting up cache...")
+	log.Print("Successfully set up cache")
 
-	log.Printf("Starting URL shortener...")
-	MappingLongToShort = make(map[string]string)
-	MappingShortToLong = make(map[string]string)
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/api/shorten", shorten).Methods("POST")
 	router.HandleFunc("/api/resolve", resolve).Methods("POST")
+
+	log.Print("Serving requests...")
 	if err := http.ListenAndServe(":8080", router); err != nil {
 		log.Fatal(err)
 	}
