@@ -1,13 +1,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/gorilla/mux"
 	nanoid "github.com/matoous/go-nanoid/v2"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/ltekieli/shorturl/cache"
 	"github.com/ltekieli/shorturl/db"
@@ -132,6 +138,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	log.Print("Starting URL shortener...")
+
 	log.Print("Connecting to database...")
 	uri := "mongodb://192.168.30.2:27017"
 	var err error
@@ -141,16 +148,35 @@ func main() {
 	}
 	defer gDb.Disconnect()
 	log.Print("Successfully connected")
-	gCache = cache.New()
+
 	log.Print("Setting up cache...")
+	gCache = cache.New()
 	log.Print("Successfully set up cache")
 
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/api/shorten", shorten).Methods("POST")
 	router.HandleFunc("/api/resolve", resolve).Methods("POST")
+	server := &http.Server{Addr: ":8080", Handler: router}
 
-	log.Print("Serving requests...")
-	if err := http.ListenAndServe(":8080", router); err != nil {
-		log.Fatal(err)
+	go func() {
+		log.Print("Serving requests")
+		if err := server.ListenAndServe(); err != nil {
+			if errors.Is(err, http.ErrServerClosed) {
+				log.Print("Server shutdown")
+			} else {
+				log.Printf("Server error during runtime: %s", err)
+			}
+		}
+	}()
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	<-stop
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Server error during shutdown: %s", err)
 	}
 }
