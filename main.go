@@ -21,8 +21,13 @@ import (
 
 const RequestLimit = 2048
 
-var gCache cache.Cache
-var gDb db.Database
+var (
+	gCache cache.Cache
+	gDb    db.Database
+
+	LogInfo  *log.Logger
+	LogError *log.Logger
+)
 
 type LongLink struct {
 	Url string `json:"url"`
@@ -35,7 +40,7 @@ type ShortLink struct {
 func shorten(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
-		log.Print("Failed to read shorten request")
+		LogError.Print("Failed to read shorten request")
 		http.Error(w, "Failed to read shorten request", http.StatusBadRequest)
 		return
 	}
@@ -43,19 +48,19 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	var longLink LongLink
 	err = json.Unmarshal(reqBody, &longLink)
 	if err != nil {
-		log.Print("Shorten request contains invalid LongLink")
+		LogError.Print("Shorten request contains invalid LongLink")
 		http.Error(w, "Shorten request contains invalid LongLink", http.StatusBadRequest)
 		return
 	}
 
 	_, err = url.ParseRequestURI(longLink.Url)
 	if err != nil {
-		log.Print("Invalid URI received")
+		LogError.Print("Invalid URI received")
 		http.Error(w, "Invalid URI received", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Shorten request received with: %s", longLink.Url)
+	LogInfo.Printf("Shorten request received with: %s", longLink.Url)
 
 	cached, ok := gCache.FetchByLong(longLink.Url)
 	if ok {
@@ -64,7 +69,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	} else {
 		sids, err := gDb.FetchByLong(longLink.Url)
 		if err != nil {
-			log.Print("Cannot fetch from database")
+			LogError.Print("Cannot fetch from database")
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
 			return
 		}
@@ -73,13 +78,13 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 			sid, _ := nanoid.New()
 			err := gDb.Insert(longLink.Url, sid)
 			if err != nil {
-				log.Print("Cannot insert to database")
+				LogError.Print("Cannot insert to database")
 				http.Error(w, "Cannot insert to database", http.StatusInternalServerError)
 				return
 			}
 			sids = append(sids, sid)
 		} else if len(sids) > 1 {
-			log.Print("Too many entries in the database for the same long link")
+			LogError.Print("Too many entries in the database for the same long link")
 			http.Error(w, "Too many entries in the database for the same long link", http.StatusInternalServerError)
 			return
 		}
@@ -93,7 +98,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 func resolve(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
-		log.Print("Failed to read resolve request")
+		LogError.Print("Failed to read resolve request")
 		http.Error(w, "Failed to read resolve request", http.StatusBadRequest)
 		return
 	}
@@ -101,12 +106,12 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	var shortLink ShortLink
 	err = json.Unmarshal(reqBody, &shortLink)
 	if err != nil {
-		log.Print("Resolve request contains invalid ShortLink")
+		LogError.Print("Resolve request contains invalid ShortLink")
 		http.Error(w, "Resolve request contains invalid ShortLink", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("Resolve request received with: %s", shortLink.Url)
+	LogInfo.Printf("Resolve request received with: %s", shortLink.Url)
 
 	cached, ok := gCache.FetchByShort(shortLink.Url)
 	if ok {
@@ -115,17 +120,17 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	} else {
 		lid, err := gDb.FetchByShort(shortLink.Url)
 		if err != nil {
-			log.Print("Cannot fetch from database")
+			LogError.Print("Cannot fetch from database")
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
 			return
 		}
 
 		if len(lid) == 0 {
-			log.Print("Short link does not exist")
+			LogError.Print("Short link does not exist")
 			http.Error(w, "Short link does not exist", http.StatusInternalServerError)
 			return
 		} else if len(lid) > 1 {
-			log.Print("Too many entries in the database for the same short link")
+			LogError.Print("Too many entries in the database for the same short link")
 			http.Error(w, "Too many entries in the database for the same short link", http.StatusInternalServerError)
 			return
 		}
@@ -137,9 +142,12 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	log.Print("Starting URL shortener...")
+	LogInfo = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
+	LogError = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
 
-	log.Print("Connecting to database...")
+	LogInfo.Print("Starting URL shortener...")
+
+	LogInfo.Print("Connecting to database...")
 	uri := "mongodb://192.168.30.2:27017"
 	var err error
 	gDb, err = db.Connect(uri, "shorturls", "shorturls")
@@ -147,11 +155,11 @@ func main() {
 		panic(err)
 	}
 	defer gDb.Disconnect()
-	log.Print("Successfully connected")
+	LogInfo.Print("Successfully connected")
 
-	log.Print("Setting up cache...")
+	LogInfo.Print("Setting up cache...")
 	gCache = cache.New()
-	log.Print("Successfully set up cache")
+	LogInfo.Print("Successfully set up cache")
 
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/api/shorten", shorten).Methods("POST")
@@ -159,12 +167,12 @@ func main() {
 	server := &http.Server{Addr: ":8080", Handler: router}
 
 	go func() {
-		log.Print("Serving requests")
+		LogInfo.Print("Serving requests")
 		if err := server.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
-				log.Print("Server shutdown")
+				LogInfo.Print("Server shutdown")
 			} else {
-				log.Printf("Server error during runtime: %s", err)
+				LogError.Printf("Server error during runtime: %s", err)
 			}
 		}
 	}()
@@ -177,6 +185,6 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := server.Shutdown(ctx); err != nil {
-		log.Printf("Server error during shutdown: %s", err)
+		LogError.Printf("Server error during shutdown: %s", err)
 	}
 }
