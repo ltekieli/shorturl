@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -12,8 +11,8 @@ import (
 )
 
 type Database interface {
-	FetchByShort(link string) (string, error)
-	FetchByLong(link string) (string, error)
+	FetchByShort(link string) ([]string, error)
+	FetchByLong(link string) ([]string, error)
 	Insert(long string, short string) error
 
 	Disconnect() error
@@ -48,56 +47,50 @@ func Connect(uri string, database string, collection string) (*MongoDatabase, er
 	return &MongoDatabase{client: client, database: mongoDatabase, collection: mongoCollection}, nil
 }
 
-func (mdb *MongoDatabase) FetchByShort(link string) (string, error) {
+func (mdb *MongoDatabase) FetchByShort(link string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cursor, err := mdb.collection.Find(ctx, bson.M{"short": bson.D{{"$eq", link}}})
 	if err != nil {
-		return "", err
+		return make([]string, 0), err
 	}
 
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var linkPairs []LinkPair
 	if err = cursor.All(ctx, &linkPairs); err != nil {
-		return "", err
+		return make([]string, 0), err
 	}
 
-	if len(linkPairs) == 0 {
-		return "", errors.New("No match found")
+	links := make([]string, len(linkPairs))
+	for i := range links {
+		links[i] = linkPairs[i].Long
 	}
 
-	if len(linkPairs) == 1 {
-		return linkPairs[0].Long, nil
-	}
-
-	return "", errors.New("Too many matches found")
+	return links, nil
 }
 
-func (mdb *MongoDatabase) FetchByLong(link string) (string, error) {
+func (mdb *MongoDatabase) FetchByLong(link string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	cursor, err := mdb.collection.Find(ctx, bson.M{"long": bson.D{{"$eq", link}}})
 	if err != nil {
-		return "", err
+		return make([]string, 0), err
 	}
 
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var linkPairs []LinkPair
 	if err = cursor.All(ctx, &linkPairs); err != nil {
-		return "", err
+		return make([]string, 0), err
 	}
 
-	if len(linkPairs) == 0 {
-		return "", errors.New("No match found")
+	links := make([]string, len(linkPairs))
+	for i := range links {
+		links[i] = linkPairs[i].Short
 	}
 
-	if len(linkPairs) == 1 {
-		return linkPairs[0].Short, nil
-	}
-
-	return "", errors.New("Too many matches found")
+	return links, nil
 }
 
 func (mdb *MongoDatabase) Insert(long string, short string) error {
