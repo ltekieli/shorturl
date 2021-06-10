@@ -121,6 +121,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 		} else if len(lid) > 1 {
 			log.Print("Too many entries in the database for the same short link")
 			http.Error(w, "Too many entries in the database for the same short link", http.StatusInternalServerError)
+			return
 		}
 
 		gCache.Update(lid[0], shortLink.Url)
