@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ltekieli/shorturl/cache"
+	"github.com/ltekieli/shorturl/cache/memcache"
 	"github.com/ltekieli/shorturl/db"
 	"github.com/ltekieli/shorturl/log"
 )
@@ -152,7 +153,7 @@ func main() {
 	log.Info("Successfully connected")
 
 	log.Info("Setting up cache...")
-	gCache = cache.New()
+	gCache = memcache.New("192.168.30.3:11211")
 	log.Info("Successfully set up cache")
 
 	router := mux.NewRouter().StrictSlash(true)
@@ -167,6 +168,7 @@ func main() {
 				log.Info("Server shutdown")
 			} else {
 				log.Errorf("Server error during runtime: %s", err)
+				panic(err)
 			}
 		}
 	}()
@@ -174,7 +176,18 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	<-stop
+	func() {
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(5 * time.Second):
+				if err := gCache.Ping(); err != nil {
+					log.Error("Cache not available")
+				}
+			}
+		}
+	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

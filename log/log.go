@@ -27,6 +27,6 @@ func Errorf(fmt string, data ...interface{}) {
 }
 
 func init() {
-	logInfo = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lmsgprefix)
-	logError = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lmsgprefix)
+	logInfo = log.New(os.Stdout, "INFO: ", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lmicroseconds)
+	logError = log.New(os.Stdout, "ERROR: ", log.Ldate|log.Ltime|log.Lmsgprefix|log.Lmicroseconds)
 }
