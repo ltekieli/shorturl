@@ -74,7 +74,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	err = json.Unmarshal(reqBody, &longLink)
 	if err != nil {
 		log.Errorf("Resolve response contains invalid LongLink: %s", err)
-		http.Error(w, "Resolve response contains invalid LongLink", http.StatusBadRequest)
+		http.Error(w, "Resolve response contains invalid LongLink", http.StatusInternalServerError)
 		return
 	}
 
