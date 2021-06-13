@@ -238,12 +238,12 @@ func getConfig() {
 func main() {
 	getConfig()
 	log.Info("Starting URL shortener...")
-	if err := connectDatabase("192.168.30.2", 27017); err != nil {
+	if err := connectDatabase("192.168.30.2", uint16(*gConfig.dbPort)); err != nil {
 		panic(err)
 	}
 	defer disconnectDatabase()
-	connectCache("192.168.30.3", 11211)
-	startServer("0.0.0.0", 8080)
+	connectCache("192.168.30.3", uint16(*gConfig.cachePort))
+	startServer("0.0.0.0", uint16(*gConfig.port))
 	defer stopServer()
 	waitForInterrupt()
 }
