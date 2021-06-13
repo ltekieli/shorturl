@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,7 +25,16 @@ import (
 
 const RequestLimit = 2048
 
+type Config struct {
+	port      *uint
+	dbIp      *string
+	dbPort    *uint
+	cacheIp   *string
+	cachePort *uint
+}
+
 var (
+	gConfig Config
 	gCache  cache.Cache
 	gDb     db.Database
 	gServer *http.Server
@@ -209,7 +219,24 @@ func waitForInterrupt() {
 	}()
 }
 
+func getConfig() {
+	gConfig = Config{}
+	gConfig.port = flag.Uint("port", 8080, "Server port.")
+	gConfig.dbIp = flag.String("db-ip", "", "Database IP address. (Required)")
+	gConfig.dbPort = flag.Uint("db-port", 27017, "Database port.")
+	gConfig.cacheIp = flag.String("cache-ip", "", "Cache IP address. (Required)")
+	gConfig.cachePort = flag.Uint("cache-port", 11211, "Cache port.")
+
+	flag.Parse()
+
+	if *gConfig.dbIp == "" || *gConfig.cacheIp == "" {
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+}
+
 func main() {
+	getConfig()
 	log.Info("Starting URL shortener...")
 	if err := connectDatabase("192.168.30.2", 27017); err != nil {
 		panic(err)
