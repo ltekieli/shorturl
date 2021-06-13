@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/gorilla/mux"
-	nanoid "github.com/matoous/go-nanoid/v2"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +12,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/gorilla/mux"
+	nanoid "github.com/matoous/go-nanoid/v2"
 
 	"github.com/ltekieli/shorturl/cache"
 	"github.com/ltekieli/shorturl/cache/memcache"
@@ -23,8 +25,9 @@ import (
 const RequestLimit = 2048
 
 var (
-	gCache cache.Cache
-	gDb    db.Database
+	gCache  cache.Cache
+	gDb     db.Database
+	gServer *http.Server
 )
 
 type LongLink struct {
@@ -38,7 +41,7 @@ type ShortLink struct {
 func shorten(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
-		log.Error("Failed to read shorten request")
+		log.Errorf("Failed to read shorten request: %s", err)
 		http.Error(w, "Failed to read shorten request", http.StatusBadRequest)
 		return
 	}
@@ -46,14 +49,14 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	var longLink LongLink
 	err = json.Unmarshal(reqBody, &longLink)
 	if err != nil {
-		log.Error("Shorten request contains invalid LongLink")
+		log.Errorf("Shorten request contains invalid LongLink: %s", err)
 		http.Error(w, "Shorten request contains invalid LongLink", http.StatusBadRequest)
 		return
 	}
 
 	_, err = url.ParseRequestURI(longLink.Url)
 	if err != nil {
-		log.Error("Invalid URI received")
+		log.Errorf("Invalid URI received: %s", err)
 		http.Error(w, "Invalid URI received", http.StatusBadRequest)
 		return
 	}
@@ -67,7 +70,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	} else {
 		sids, err := gDb.FetchByLong(longLink.Url)
 		if err != nil {
-			log.Error("Cannot fetch from database")
+			log.Errorf("Cannot fetch from database: %s", err)
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
 			return
 		}
@@ -76,7 +79,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 			sid, _ := nanoid.New()
 			err := gDb.Insert(longLink.Url, sid)
 			if err != nil {
-				log.Error("Cannot insert to database")
+				log.Errorf("Cannot insert to database: %s", err)
 				http.Error(w, "Cannot insert to database", http.StatusInternalServerError)
 				return
 			}
@@ -96,7 +99,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 func resolve(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(io.LimitReader(r.Body, RequestLimit))
 	if err != nil {
-		log.Error("Failed to read resolve request")
+		log.Errorf("Failed to read resolve request: %s", err)
 		http.Error(w, "Failed to read resolve request", http.StatusBadRequest)
 		return
 	}
@@ -104,7 +107,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	var shortLink ShortLink
 	err = json.Unmarshal(reqBody, &shortLink)
 	if err != nil {
-		log.Error("Resolve request contains invalid ShortLink")
+		log.Errorf("Resolve request contains invalid ShortLink: %s", err)
 		http.Error(w, "Resolve request contains invalid ShortLink", http.StatusBadRequest)
 		return
 	}
@@ -118,7 +121,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	} else {
 		lid, err := gDb.FetchByShort(shortLink.Url)
 		if err != nil {
-			log.Error("Cannot fetch from database")
+			log.Errorf("Cannot fetch from database: %s", err)
 			http.Error(w, "Cannot fetch from database", http.StatusInternalServerError)
 			return
 		}
@@ -139,31 +142,37 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
-	log.Info("Starting URL shortener...")
-
+func connectDatabase(ip string, port uint16) error {
 	log.Info("Connecting to database...")
-	uri := "mongodb://192.168.30.2:27017"
+	uri := fmt.Sprintf("mongodb://%s:%d", ip, port)
 	var err error
 	gDb, err = db.Connect(uri, "shorturls", "shorturls")
 	if err != nil {
-		panic(err)
+		return err
 	}
-	defer gDb.Disconnect()
 	log.Info("Successfully connected")
+	return nil
+}
 
+func disconnectDatabase() {
+	gDb.Disconnect()
+}
+
+func connectCache(ip string, port uint16) {
 	log.Info("Setting up cache...")
-	gCache = memcache.New("192.168.30.3:11211")
+	gCache = memcache.New(fmt.Sprintf("%s:%d", ip, port))
 	log.Info("Successfully set up cache")
+}
 
+func startServer(ip string, port uint16) {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/api/shorten", shorten).Methods("POST")
 	router.HandleFunc("/api/resolve", resolve).Methods("POST")
-	server := &http.Server{Addr: ":8080", Handler: router}
+	gServer = &http.Server{Addr: fmt.Sprintf("%s:%d", ip, port), Handler: router}
 
 	go func() {
 		log.Info("Serving requests")
-		if err := server.ListenAndServe(); err != nil {
+		if err := gServer.ListenAndServe(); err != nil {
 			if errors.Is(err, http.ErrServerClosed) {
 				log.Info("Server shutdown")
 			} else {
@@ -172,7 +181,17 @@ func main() {
 			}
 		}
 	}()
+}
 
+func stopServer() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := gServer.Shutdown(ctx); err != nil {
+		log.Errorf("Server error during shutdown: %s", err)
+	}
+}
+
+func waitForInterrupt() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
@@ -188,10 +207,16 @@ func main() {
 			}
 		}
 	}()
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := server.Shutdown(ctx); err != nil {
-		log.Errorf("Server error during shutdown: %s", err)
+func main() {
+	log.Info("Starting URL shortener...")
+	if err := connectDatabase("192.168.30.2", 27017); err != nil {
+		panic(err)
 	}
+	defer disconnectDatabase()
+	connectCache("192.168.30.3", 11211)
+	startServer("0.0.0.0", 8080)
+	defer stopServer()
+	waitForInterrupt()
 }

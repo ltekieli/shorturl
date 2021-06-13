@@ -37,6 +37,9 @@ func Connect(uri string, database string, collection string) (*MongoDatabase, er
 	if err != nil {
 		return nil, err
 	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	if err := client.Ping(ctx, readpref.Primary()); err != nil {
 		return nil, err
 	}
