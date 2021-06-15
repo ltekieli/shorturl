@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/mux"
 	nanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/rs/cors"
 
 	"github.com/ltekieli/shorturl/cache"
 	"github.com/ltekieli/shorturl/cache/memcache"
@@ -178,7 +179,10 @@ func startServer(ip string, port uint16) {
 	router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/api/shorten", shorten).Methods("POST")
 	router.HandleFunc("/api/resolve", resolve).Methods("POST")
-	gServer = &http.Server{Addr: fmt.Sprintf("%s:%d", ip, port), Handler: router}
+
+	handler := cors.Default().Handler(router)
+
+	gServer = &http.Server{Addr: fmt.Sprintf("%s:%d", ip, port), Handler: handler}
 
 	go func() {
 		log.Info("Serving requests")
