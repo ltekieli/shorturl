@@ -84,7 +84,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 func startServer(ip string, port uint16) {
 	router := mux.NewRouter().StrictSlash(true)
 	router.PathPrefix("/static").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(*gConfig.static)))).Methods("GET")
-	router.HandleFunc("/{shortid}", resolve).Methods("GET")
+	router.HandleFunc("/x/{shortid}", resolve).Methods("GET")
 	router.PathPrefix("/").Handler(http.FileServer(http.Dir(*gConfig.static))).Methods("GET")
 
 	gServer = &http.Server{Addr: fmt.Sprintf("%s:%d", ip, port), Handler: router}
