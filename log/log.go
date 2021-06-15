@@ -2,7 +2,7 @@ package log
 
 import (
 	"log"
-    "os"
+	"os"
 )
 
 var (
@@ -11,19 +11,19 @@ var (
 )
 
 func Info(fmt string) {
-    logInfo.Print(fmt);
+	logInfo.Print(fmt)
 }
 
 func Infof(fmt string, data ...interface{}) {
-    logInfo.Printf(fmt, data);
+	logInfo.Printf(fmt, data)
 }
 
 func Error(fmt string) {
-    logError.Print(fmt);
+	logError.Print(fmt)
 }
 
 func Errorf(fmt string, data ...interface{}) {
-    logError.Printf(fmt, data);
+	logError.Printf(fmt, data)
 }
 
 func init() {

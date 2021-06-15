@@ -6,13 +6,13 @@ type InMemoryCache struct {
 }
 
 func (cache *InMemoryCache) FetchByLong(link string) (string, bool) {
-    v, found := cache.MappingLongToShort[link]
-    return v, found
+	v, found := cache.MappingLongToShort[link]
+	return v, found
 }
 
 func (cache *InMemoryCache) FetchByShort(link string) (string, bool) {
-    v, found := cache.MappingShortToLong[link]
-    return v, found
+	v, found := cache.MappingShortToLong[link]
+	return v, found
 }
 
 func (cache *InMemoryCache) Update(long string, short string) {
@@ -21,7 +21,7 @@ func (cache *InMemoryCache) Update(long string, short string) {
 }
 
 func (cache *InMemoryCache) Ping() error {
-    return nil
+	return nil
 }
 
 func New() *InMemoryCache {
