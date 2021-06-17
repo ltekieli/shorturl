@@ -1,41 +1,7 @@
 #!/bin/bash
 
-docker stop shorturl-api1
-docker stop shorturl-web1
-docker stop shorturl-mongo1
-docker stop shorturl-memcached1
-
-docker volume create shorturl-mongo1-data
-
-docker run \
-    --rm \
-    --name shorturl-mongo1 \
-    -d \
-    -v shorturl-mongo1-data:/data/db \
-    mongo:latest
-
-docker run \
-    --rm \
-    --name shorturl-memcached1 \
-    -d \
-    memcached:latest \
-    memcached -m 64
-
-docker run \
-    --rm \
-    --name shorturl-api1 \
-    -d \
-    -p 8090:8090 \
-    shorturl-api:latest \
-    shorturl-api --db-ip=192.168.30.2 --cache-ip=192.168.30.3 --port=8090
-
-docker run \
-    --rm \
-    --name shorturl-web1 \
-    -d \
-    -p 8080:8080 \
-    shorturl-web:latest \
-    shorturl-web --api-server=192.168.30.4:8090 --port=8080 --static=/var/www
+docker-compose -f test/docker-compose.yml down
+docker-compose -f test/docker-compose.yml up -d
 
 sleep 5
 
@@ -50,7 +16,4 @@ while true ; do
     fi
 done
 
-docker stop shorturl-api1
-docker stop shorturl-web1
-docker stop shorturl-mongo1
-docker stop shorturl-memcached1
+docker-compose -f test/docker-compose.yml down

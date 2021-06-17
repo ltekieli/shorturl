@@ -1,0 +1,28 @@
+version: "3.9"  # optional since v1.27.0
+services:
+  mongodb:
+    image: mongo
+    volumes:
+      - shorturl-mongo1-data:/data/db
+  memcached:
+    image: memcached
+    command: memcached -m 64
+  shorturl-api:
+    image: shorturl-api
+    ports:
+      - 8090:8090
+    command: shorturl-api --db-ip=mongodb --cache-ip=memcached --port=8090
+  shorturl-web:
+    image: shorturl-web
+    ports:
+      - 8080:8080
+    command: shorturl-web --api-server=shorturl-api:8090 --port=8080 --static=/var/www
+volumes:
+  shorturl-mongo1-data: {}
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.16.57.0/24
+
