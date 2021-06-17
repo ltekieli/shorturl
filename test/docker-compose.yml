@@ -11,12 +11,12 @@ services:
     image: shorturl-api
     ports:
       - 8090:8090
-    command: shorturl-api --db-ip=mongodb --cache-ip=memcached --port=8090
+    command: shorturl-api --db-ip=mongodb --cache-ip=memcached
   shorturl-web:
     image: shorturl-web
     ports:
       - 8080:8080
-    command: shorturl-web --api-server=shorturl-api:8090 --port=8080 --static=/var/www
+    command: shorturl-web --api-ip=shorturl-api --static=/var/www
 volumes:
   shorturl-mongo1-data: {}
 networks:

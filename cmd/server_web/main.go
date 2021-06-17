@@ -22,9 +22,10 @@ import (
 const RequestLimit = 2048
 
 type Config struct {
-	port      *uint
-	static    *string
-	apiServer *string
+	port    *uint
+	static  *string
+	apiIp   *string
+	apiPort *uint
 }
 
 var (
@@ -50,7 +51,7 @@ func resolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := http.Post(fmt.Sprintf("http://%s/api/resolve", *gConfig.apiServer), "application/json", bytes.NewReader(b))
+	resp, err := http.Post(fmt.Sprintf("http://%s:%d/api/resolve", *gConfig.apiIp, *gConfig.apiPort), "application/json", bytes.NewReader(b))
 	if err != nil {
 		log.Errorf("Failed to resolve short id: %s", err)
 		http.Error(w, "Failed to resolve short id", http.StatusInternalServerError)
@@ -128,10 +129,11 @@ func getConfig() {
 	gConfig = Config{}
 	gConfig.port = flag.Uint("port", 8080, "Server port.")
 	gConfig.static = flag.String("static", "", "Static content directory. (Required)")
-	gConfig.apiServer = flag.String("api-server", "", "IP and port of the API server. (Required)")
+	gConfig.apiIp = flag.String("api-ip", "", "IP of the API server. (Required)")
+	gConfig.apiPort = flag.Uint("api-port", 8090, "Port of the API server")
 	flag.Parse()
 
-	if *gConfig.static == "" || *gConfig.apiServer == "" {
+	if *gConfig.static == "" || *gConfig.apiIp == "" {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}

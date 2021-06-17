@@ -225,7 +225,7 @@ func waitForInterrupt() {
 
 func getConfig() {
 	gConfig = Config{}
-	gConfig.port = flag.Uint("port", 8080, "Server port.")
+	gConfig.port = flag.Uint("port", 8090, "Server port.")
 	gConfig.dbIp = flag.String("db-ip", "", "Database IP address. (Required)")
 	gConfig.dbPort = flag.Uint("db-port", 27017, "Database port.")
 	gConfig.cacheIp = flag.String("cache-ip", "", "Cache IP address. (Required)")
