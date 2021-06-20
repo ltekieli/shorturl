@@ -1,6 +1,9 @@
-FROM alpine:3.13.5
 
-RUN mkdir /lib64 && ln -s /lib/libc.musl-x86_64.so.1 /lib64/ld-linux-x86-64.so.2
+FROM golang:1.16-alpine3.13 as build
+ADD . /workspace
+RUN cd /workspace && go build -v -o shorturl-web cmd/server_web/main.go
 
-ADD shorturl-web /usr/bin/
+FROM alpine:3.13
+COPY --from=build /workspace/shorturl-web /usr/bin
 ADD web /var/www
+
