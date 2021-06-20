@@ -6,7 +6,7 @@ shortenerForm.onsubmit = async (e) => {
       url : form.querySelector('input[name="longid"]').value,
     }
 
-    let response = await fetch('http://localhost:8090/api/shorten', {
+    let response = await fetch('api/shorten', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

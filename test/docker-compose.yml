@@ -9,14 +9,14 @@ services:
     command: memcached -m 64
   shorturl-api:
     image: shorturl-api
-    ports:
-      - 8090:8090
     command: shorturl-api --db-ip=mongodb --cache-ip=memcached
   shorturl-web:
     image: shorturl-web
-    ports:
-      - 8080:8080
     command: shorturl-web --api-ip=shorturl-api --static=/var/www
+  shorturl-nginx:
+    image: shorturl-nginx
+    ports:
+      - 80:80
 volumes:
   shorturl-mongo1-data: {}
 networks:

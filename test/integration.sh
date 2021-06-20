@@ -1,11 +1,11 @@
 #!/bin/bash
 
 docker-compose -f test/docker-compose.yml down
-docker-compose -f test/docker-compose.yml up -d
+docker-compose -f test/docker-compose.yml up -d --scale shorturl-web=3 --scale shorturl-api=3
 
 sleep 5
 
-curl -v --data '{"url": "http://example.com"}' localhost:8090/api/shorten
+curl -v --data '{"url": "http://example.com"}' http://localhost/api/shorten
 
 echo "Press any key to continue"
 while true ; do
